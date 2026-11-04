@@ -1,11 +1,18 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
+import { networkInterfaces } from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
 import dotenv from 'dotenv';
 import { topics } from './src/data/topics.ts';
+import {
+  createStoredUser,
+  getStoredProgress,
+  getStoredUser,
+  toggleStoredProgress,
+} from './serverDatabase.ts';
 
 dotenv.config();
 
@@ -30,20 +37,6 @@ function runCppEngine(args: string[]): Promise<any> {
     });
   });
 }
-
-// In-memory fallback if C++ engine is unavailable
-const fallbackUsers = new Map<string, any>([
-  [
-    'student@dsahub.edu',
-    {
-      id: 'student_01',
-      name: 'Alan Turing',
-      email: 'student@dsahub.edu',
-      password: 'password123',
-      completedTopics: [],
-    },
-  ],
-]);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dsahub_secret_key_2026';
 
@@ -144,19 +137,17 @@ async function startServer() {
     }
 
     // Fallback if C++ binary fails
-    if (fallbackUsers.has(cleanEmail)) {
+    if (getStoredUser(cleanEmail)) {
       res.status(400).json({ message: 'Account already exists with this email' });
       return;
     }
 
-    const newUser = {
+    const newUser = createStoredUser({
       id: 'student_' + Date.now(),
       name: name.trim(),
       email: cleanEmail,
       password,
-      completedTopics: [],
-    };
-    fallbackUsers.set(cleanEmail, newUser);
+    });
     const token = createToken(newUser);
     res.status(201).json({
       token,
@@ -192,8 +183,8 @@ async function startServer() {
       return;
     }
 
-    // Fallback
-    const user = fallbackUsers.get(cleanEmail);
+    // SQLite fallback
+    const user = getStoredUser(cleanEmail);
     if (!user || user.password !== password) {
       res.status(401).json({ message: 'Invalid email or password' });
       return;
@@ -221,8 +212,7 @@ async function startServer() {
       return;
     }
 
-    const fallback = fallbackUsers.get(user.email);
-    res.json(fallback ? fallback.completedTopics : []);
+    res.json(getStoredProgress(user.email));
   });
 
   app.post('/api/progress', authMiddleware, async (req: Request, res: Response) => {
@@ -243,11 +233,8 @@ async function startServer() {
       return;
     }
 
-    const fallback = fallbackUsers.get(user.email);
-    if (fallback && !fallback.completedTopics.includes(topicId)) {
-      fallback.completedTopics.push(topicId);
-    }
-    res.json({ message: 'Progress saved', topicId, completedTopics: fallback?.completedTopics || [topicId] });
+    const completedTopics = toggleStoredProgress(user.email, topicId);
+    res.json({ message: 'Progress saved', topicId, completedTopics });
   });
 
   // Vite Middleware / Static Files
@@ -266,6 +253,12 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`DSA Hub server running on http://localhost:${PORT}`);
+    const localAddresses = Object.values(networkInterfaces()).flatMap((interfaces) =>
+      interfaces?.filter((info) => info.family === 'IPv4' && !info.internal).map((info) => info.address) ?? [],
+    );
+    for (const address of localAddresses) {
+      console.log(`Phone access (same Wi-Fi): http://${address}:${PORT}`);
+    }
   });
 }
 

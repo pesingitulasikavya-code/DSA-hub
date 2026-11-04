@@ -496,7 +496,12 @@ function RegisterPage({ onRegisterSuccess }: { onRegisterSuccess: (user: User) =
       onRegisterSuccess(res.user);
       navigate('/');
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Registration failed');
+      setError(
+        err?.response?.data?.message ||
+          (err?.code === 'ERR_NETWORK'
+            ? 'Cannot reach the registration server. If it is running on your laptop, connect both devices to the same Wi-Fi and open the laptop address shown in its terminal (not localhost).'
+            : err?.message || 'Registration failed'),
+      );
     } finally {
       setLoading(false);
     }
@@ -530,6 +535,7 @@ function RegisterPage({ onRegisterSuccess }: { onRegisterSuccess: (user: User) =
             <input
               className="form-input"
               type="text"
+              autoComplete="name"
               required
               placeholder="e.g. Grace Hopper"
               value={name}
@@ -542,6 +548,8 @@ function RegisterPage({ onRegisterSuccess }: { onRegisterSuccess: (user: User) =
             <input
               className="form-input"
               type="email"
+              autoComplete="email"
+              inputMode="email"
               required
               placeholder="student@dsahub.edu"
               value={email}
@@ -554,6 +562,8 @@ function RegisterPage({ onRegisterSuccess }: { onRegisterSuccess: (user: User) =
             <input
               className="form-input"
               type="password"
+              autoComplete="new-password"
+              minLength={6}
               required
               placeholder="••••••••"
               value={password}
