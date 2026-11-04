@@ -87,6 +87,25 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const allowedOrigins = [
+      'https://pesingitulasikavya-code.github.io',
+      ...(process.env.ALLOWED_ORIGINS?.split(',').map((value) => value.trim()).filter(Boolean) || []),
+    ];
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin || '*');
+      res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
 
   // Health and C++ Engine Status
   app.get('/api/health', async (_req: Request, res: Response) => {
